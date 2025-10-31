@@ -1,38 +1,39 @@
 "use client";
 
 import React from "react";
-import { useAuthForm } from "./auth/useAuthForm";
 import EmailStep from "./auth/EmailStep";
 import RegistrationStep from "./auth/RegistrationStep";
 import OTPStep from "./auth/OTPStep";
+import { useAuthForm } from "./auth/useAuthForm";
 
-const AuthForm = () => {
-  const {
-    step,
-    email,
-    name,
-    otp,
-    emailError,
-    nameError,
-    loading,
-    isRegistering,
-    successMessage,
-    errorMessage,
-    setEmail,
-    setName,
-    setOtp,
-    handleEmailSubmit,
-    handleRegistrationSubmit,
-    handleOtpSubmit,
-    handleResendOtp,
-    handleChangeEmail,
-    toggleAuthMode,
-    AuthStep,
-  } = useAuthForm();
+// The props type will be the return type of our hook
+type AuthFormProps = ReturnType<typeof useAuthForm>;
 
+const AuthForm: React.FC<AuthFormProps> = ({
+  step,
+  email,
+  name,
+  otp,
+  emailError,
+  nameError,
+  loading,
+  isRegistering,
+  successMessage,
+  errorMessage,
+  setEmail,
+  setName,
+  setOtp,
+  handleEmailSubmit,
+  handleRegistrationSubmit,
+  handleOtpSubmit,
+  handleResendOtp,
+  handleChangeEmail,
+  toggleAuthMode,
+  AuthStep,
+}) => {
   return (
     <div className="w-full max-w-md">
-      <div className="bg-white p-8 rounded-2xl shadow-lg border border-gray-100">
+      <div className="bg-[#f8fffe] p-8 rounded-2xl shadow-lg border border-gray-100">
         {step === AuthStep.EMAIL && (
           <EmailStep
             email={email}

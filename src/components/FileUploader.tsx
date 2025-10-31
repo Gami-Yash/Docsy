@@ -1,14 +1,13 @@
 import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Upload, X, Loader2, FolderOpen, File as FileIcon, Plus } from 'lucide-react';
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { useToast } from "@/hooks/use-toast";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Upload, X, Loader2, FolderOpen, FileText, Plus } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 import { Client, Storage, ID, Databases } from 'appwrite';
-import { appwriteConfig } from "@/lib/config/appwriteConfig";
 import { Progress } from "@/components/ui/progress";
 import { extractTextFromPDF } from "@/services/PdfProcessingService";
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 
@@ -21,15 +20,22 @@ declare module 'react' {
 }
 
 interface FileUploaderProps {
-  onFileUpload: (file: any) => void;
-  onCancel: () => void;
+  isOpen: boolean;
+  onClose: () => void;
+  onFileUploaded: (fileData: any) => void;
+  userId: string;
   selectedFolderId?: string | null;
-  onFolderCreated?: (folder: any) => void; // Add this prop
 }
 
-const FileUploader: React.FC<FileUploaderProps> = ({ onFileUpload, onCancel, selectedFolderId, onFolderCreated }) => {
-  const [files, setFiles] = useState<File[]>([]);
+const FileUploader: React.FC<FileUploaderProps> = ({
+  isOpen,
+  onClose,
+  onFileUploaded,
+  userId,
+  selectedFolderId = null,
+}) => {
   const [isDragging, setIsDragging] = useState(false);
+  const [files, setFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [currentFileIndex, setCurrentFileIndex] = useState(0);
@@ -212,8 +218,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileUpload, onCancel, sel
             fileId: fileId,
             page: pageIdx + 1,
             chunk: chunkIdx,
-            userId: userId,           // Add owner information
-            folderId: folderId || null // Add folder association
+            userId: userId,
+            folderId: folderId || null
           }
         }));
         
@@ -262,8 +268,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileUpload, onCancel, sel
         targetFolderId = newFolder.$id;
         
         // Tell the parent component about the new folder
-        if (onFolderCreated && typeof onFolderCreated === 'function') {
-          onFolderCreated(newFolder);
+        if (onFileUploaded && typeof onFileUploaded === 'function') {
+          onFileUploaded(newFolder);
         }
         
         toast({
@@ -277,7 +283,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileUpload, onCancel, sel
           description: "Will upload files without folder",
           variant: "destructive",
         });
-        targetFolderId = null; // Upload to root if folder creation fails
+        targetFolderId = null;
       }
     }
     
@@ -304,8 +310,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileUpload, onCancel, sel
           throw new Error("User not authenticated");
         }
 
-        // 3. Prepare file document data - always use targetFolderId which could be
-        // either the selected folder or a newly created one
+        // 3. Prepare file document data
         const fileDocument = {
           fileID: bucketFile.$id,
           fileName: file.name,
@@ -333,7 +338,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileUpload, onCancel, sel
           bucketFile.$id, 
           newFileDoc.$id, 
           userId, 
-          targetFolderId || ""  // Use empty string instead of null
+          targetFolderId || ""
         );
         
         // 6. Notify parent component about the uploaded file
@@ -345,7 +350,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileUpload, onCancel, sel
           name: file.name
         };
         
-        onFileUpload(fileData);
+        onFileUploaded(fileData);
         
         // Short pause between files
         await new Promise(resolve => setTimeout(resolve, 500));
@@ -368,7 +373,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileUpload, onCancel, sel
     setIsUploading(false);
     
     // Close the uploader after all files are processed
-    setTimeout(() => onCancel(), 1000);
+    setTimeout(() => onClose(), 1000);
   };
 
   const handleQuickFolderCreate = async () => {
@@ -401,8 +406,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileUpload, onCancel, sel
       setUseExistingFolder(false);
       
       // Tell the parent component about the new folder
-      if (onFolderCreated && typeof onFolderCreated === 'function') {
-        onFolderCreated(newFolder);
+      if (onFileUploaded && typeof onFileUploaded === 'function') {
+        onFileUploaded(newFolder);
       }
       
       toast({
@@ -429,258 +434,346 @@ const FileUploader: React.FC<FileUploaderProps> = ({ onFileUpload, onCancel, sel
     }
   };
 
-  // Add this function near the top of your component
+  // Check if device is iOS
   const isIOS = () => {
     return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
       (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   };
 
+  const handleCancel = () => {
+    setFiles([]);
+    setUploadProgress(0);
+    onClose();
+  };
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <Card className="w-full max-w-md mx-4 animate-fade-in">
-        <CardHeader>
-          <div className="flex justify-between items-center">
-            <CardTitle>Upload PDFs</CardTitle>
-            <Button variant="ghost" size="icon" onClick={onCancel} disabled={isUploading}>
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <Tabs defaultValue="files" className="mb-4">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="files">Upload Files</TabsTrigger>
-              <TabsTrigger value="folder">Upload Folder</TabsTrigger>
-            </TabsList>
-            <TabsContent value="files" className="mt-4">
-              <div
-                className={`border-2 border-dashed rounded-lg p-8 transition-colors ${
-                  isDragging ? 'border-purple-500 bg-purple-50' : 'border-gray-300'
-                }`}
-                onDragEnter={handleDragEnter}
-                onDragLeave={handleDragLeave}
-                onDragOver={handleDragOver}
-                onDrop={handleDrop}
-              >
-                <div className="text-center">
-                  <div className="bg-gray-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                    <Upload className="h-8 w-8 text-gray-400" />
-                  </div>
-                  <p className="text-base font-medium mb-1">Drag & drop PDFs here</p>
-                  <p className="text-sm text-gray-500 mb-4">or click to browse files</p>
-                  <Button
-                    variant="outline"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    Select files
-                  </Button>
-                  <input
-                    type="file"
-                    accept=".pdf"
-                    multiple
-                    className="hidden"
-                    ref={fileInputRef}
-                    onChange={handleFileInputChange}
-                  />
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Upload PDFs</DialogTitle>
+        </DialogHeader>
+
+        <Tabs defaultValue="upload" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="upload">Upload Files</TabsTrigger>
+            <TabsTrigger value="folder">Upload Folder</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="upload" className="space-y-4">
+            <div
+              onDragEnter={handleDragEnter}
+              onDragLeave={handleDragLeave}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+              className={`border-2 border-dashed rounded-lg p-8 transition-colors cursor-pointer ${
+                isDragging ? 'border-primary bg-green-50' : 'border-gray-300 hover:border-gray-400'
+              }`}
+            >
+              <div className="text-center">
+                <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-lg font-medium text-gray-700 mb-2">
+                  Drag & drop PDFs here
+                </p>
+                <p className="text-sm text-gray-500 mb-4">
+                  or click to browse files
+                </p>
+                <Button 
+                  variant="outline" 
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  Select files
+                </Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf"
+                  multiple
+                  onChange={handleFileInputChange}
+                  className="hidden"
+                />
+              </div>
+            </div>
+
+            {/* Selected Files Preview */}
+            {files.length > 0 && (
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium text-gray-700">
+                  Selected files ({files.length})
+                </h4>
+                <div className="max-h-32 overflow-y-auto space-y-2">
+                  {files.map((file, index) => (
+                    <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                      <div className="flex items-center min-w-0">
+                        <FileText className="h-4 w-4 text-red-500 mr-2 flex-shrink-0" />
+                        <span className="text-sm truncate">{file.name}</span>
+                      </div>
+                      <div className="flex items-center ml-2">
+                        <Badge variant="outline" className="text-xs mr-2">
+                          {(file.size / (1024 * 1024)).toFixed(1)} MB
+                        </Badge>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeFile(index)}
+                          className="text-gray-400 hover:text-red-500 p-1 h-auto"
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
-            </TabsContent>
-            <TabsContent value="folder" className="mt-4">
-              {isIOS() ? (
-                <div className="border-2 border-dashed rounded-lg p-8 border-gray-300 bg-yellow-50">
-                  <div className="text-center">
-                    <div className="bg-yellow-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                      <FolderOpen className="h-8 w-8 text-yellow-600" />
-                    </div>
-                    <p className="text-base font-medium mb-1">Folder upload not supported</p>
-                    <p className="text-sm text-gray-700 mb-4">
-                      Folder upload is not supported on iOS devices. Please upload files individually or use a desktop browser.
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="border-2 border-dashed rounded-lg p-8 border-gray-300">
-                  <div className="text-center">
-                    <div className="bg-gray-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                      <FolderOpen className="h-8 w-8 text-gray-400" />
-                    </div>
-                    <p className="text-base font-medium mb-1">Upload an entire folder</p>
-                    <p className="text-sm text-gray-500 mb-4">
-                      {selectedFolderId 
-                        ? "Files will be extracted and uploaded to the selected folder" 
-                        : "Select a folder from your computer"}
-                    </p>
-                    <Button
-                      variant="outline"
-                      onClick={() => folderInputRef.current?.click()}
-                    >
-                      Select folder
-                    </Button>
-                    <input
-                      type="file"
-                      webkitdirectory="true"
-                      directory=""
-                      multiple
-                      className="hidden"
-                      ref={folderInputRef}
-                      onChange={handleFolderInputChange}
-                    />
-                  </div>
-                </div>
-              )}
+            )}
 
-              {folderName && !selectedFolderId ? (
-                <div className="mt-4 p-4 border rounded-md bg-gray-50">
-                  <p className="font-medium mb-2">Selected folder: <span className="text-purple-600">{folderName}</span></p>
-                  
-                  <div className="flex items-center gap-2 mt-3">
-                    <input
-                      type="checkbox"
-                      id="create-new-folder-option"
-                      checked={!useExistingFolder}
-                      onChange={(e) => setUseExistingFolder(!e.target.checked)}
-                      className="h-4 w-4 border-gray-300 rounded text-purple-600"
-                    />
-                    <label htmlFor="create-new-folder-option" className="text-sm">
-                      Create as a new top-level folder
-                    </label>
-                  </div>
+            {/* Upload Progress */}
+            {isUploading && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">
+                    Uploading... ({currentFileIndex + 1}/{totalFiles})
+                  </span>
+                  <span className="text-sm text-gray-500">
+                    {Math.round(uploadProgress)}%
+                  </span>
                 </div>
-              ) : selectedFolderId ? (
-                <div className="mt-4 p-4 border rounded-md bg-gray-50">
-                  <p className="font-medium">Files will be uploaded to the selected folder</p>
-                </div>
-              ) : (
-                <div className="flex items-center justify-between mt-4">
-                  <div className="h-px bg-gray-200 flex-grow"></div>
-                  <span className="px-3 text-xs text-gray-500">or</span>
-                  <div className="h-px bg-gray-200 flex-grow"></div>
-                </div>
-              )}
-              
-              {/* Only show "Create Empty Folder" when we're not creating a folder already and no folder is selected */}
-              {!folderName && !selectedFolderId && (
-                <Button
-                  variant="outline" 
-                  onClick={() => setShowQuickFolderCreate(true)}
-                  className="w-full mt-4"
+                <Progress value={uploadProgress} className="h-2" />
+              </div>
+            )}
+
+            <div className="flex justify-end space-x-2">
+              <Button variant="outline" onClick={handleCancel} disabled={isUploading}>
+                Cancel
+              </Button>
+              {files.length > 0 && (
+                <Button 
+                  onClick={uploadFilesToAppwrite}
+                  disabled={isUploading}
+                  className="bg-primary hover:bg-primary/90"
                 >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Create Empty Folder
+                  {isUploading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>Upload {files.length} file{files.length > 1 ? 's' : ''}</>
+                  )}
                 </Button>
               )}
-              
-              {showQuickFolderCreate && !selectedFolderId && (
-                <div className="mt-4 border p-4 rounded-md bg-gray-50">
-                  <h4 className="text-sm font-medium mb-2">Create New Folder</h4>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="folder" className="space-y-4">
+            {/* Folder Selection UI */}
+            {!useExistingFolder && folderName && (
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <FolderOpen className="h-5 w-5 text-blue-600 mr-2" />
+                    <span className="text-sm font-medium text-blue-800">
+                      Folder detected: {folderName}
+                    </span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setUseExistingFolder(true);
+                      setFolderName("");
+                    }}
+                    className="text-blue-600 hover:text-blue-800"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+                <p className="text-xs text-blue-600 mt-1">
+                  Files will be uploaded to a new "{folderName}" folder
+                </p>
+              </div>
+            )}
+
+            {/* Folder Upload Area */}
+            <div
+              onDragEnter={handleDragEnter}
+              onDragLeave={handleDragLeave}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+              className={`border-2 border-dashed rounded-lg p-8 transition-colors ${
+                isDragging ? 'border-primary bg-green-50' : 'border-gray-300 hover:border-gray-400'
+              }`}
+            >
+              <div className="text-center">
+                <FolderOpen className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-lg font-medium text-gray-700 mb-2">
+                  Drop folder here or click to browse
+                </p>
+                <p className="text-sm text-gray-500 mb-4">
+                  Upload entire folders with PDF files
+                </p>
+                {!isIOS() ? (
+                  <Button
+                    variant="outline"
+                    onClick={() => folderInputRef.current?.click()}
+                    type="button"
+                  >
+                    <FolderOpen className="mr-2 h-4 w-4" />
+                    Select Folder
+                  </Button>
+                ) : (
+                  <div className="text-sm text-gray-500">
+                    <p>Folder upload not supported on iOS</p>
+                    <p className="mt-1">Please use individual file upload</p>
+                  </div>
+                )}
+                <input
+                  ref={folderInputRef}
+                  type="file"
+                  webkitdirectory="true"
+                  directory="true"
+                  multiple
+                  onChange={handleFolderInputChange}
+                  className="hidden"
+                  accept=".pdf"
+                />
+              </div>
+            </div>
+
+            {/* Quick Folder Create */}
+            {!selectedFolderId && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-700">Or create a new folder</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowQuickFolderCreate(!showQuickFolderCreate)}
+                    className="text-primary hover:text-primary/80"
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    {showQuickFolderCreate ? 'Cancel' : 'New Folder'}
+                  </Button>
+                </div>
+                
+                {showQuickFolderCreate && (
                   <div className="flex gap-2">
                     <Input
+                      placeholder="Folder name"
                       value={quickFolderName}
                       onChange={(e) => setQuickFolderName(e.target.value)}
-                      placeholder="Enter folder name"
                       className="flex-1"
-                      disabled={isCreatingQuickFolder}
-                      autoFocus
                     />
-                    <Button 
+                    <Button
                       onClick={handleQuickFolderCreate}
                       disabled={isCreatingQuickFolder || !quickFolderName.trim()}
+                      size="sm"
                     >
-                      {isCreatingQuickFolder ? 
-                        <Loader2 className="h-4 w-4 animate-spin" /> : 
+                      {isCreatingQuickFolder ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
                         'Create'
-                      }
-                    </Button>
-                    <Button 
-                      variant="ghost" 
-                      onClick={() => setShowQuickFolderCreate(false)}
-                      disabled={isCreatingQuickFolder}
-                    >
-                      <X className="h-4 w-4" />
+                      )}
                     </Button>
                   </div>
+                )}
+              </div>
+            )}
+
+            {/* Selected Files Preview */}
+            {files.length > 0 && (
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium text-gray-700">
+                  Selected files ({files.length})
+                </h4>
+                <div className="max-h-32 overflow-y-auto space-y-2">
+                  {files.map((file, index) => (
+                    <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                      <div className="flex items-center min-w-0">
+                        <FileText className="h-4 w-4 text-red-500 mr-2 flex-shrink-0" />
+                        <span className="text-sm truncate">{file.name}</span>
+                      </div>
+                      <div className="flex items-center ml-2">
+                        <Badge variant="outline" className="text-xs mr-2">
+                          {(file.size / (1024 * 1024)).toFixed(1)} MB
+                        </Badge>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeFile(index)}
+                          className="text-gray-400 hover:text-red-500 p-1 h-auto"
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              )}
-            </TabsContent>
-          </Tabs>
 
-          {/* Selected Files List */}
-          {files.length > 0 && (
-            <div className="mt-4">
-              <p className="text-sm font-medium mb-2">Selected files ({files.length}):</p>
-              <div className="max-h-32 overflow-y-auto border rounded-md p-2">
-                {files.map((file, index) => (
-                  <div 
-                    key={`${file.name}-${index}`}
-                    className="flex items-center justify-between py-1 px-2 text-sm hover:bg-gray-50 rounded"
-                  >
-                    <div className="flex items-center overflow-hidden">
-                      <FileIcon className="h-4 w-4 text-purple-500 flex-shrink-0 mr-2" />
-                      <span className="truncate">{file.name}</span>
-                    </div>
-                    <div className="flex items-center ml-2">
-                      <Badge variant="outline" className="text-xs mr-2">
-                        {(file.size / (1024 * 1024)).toFixed(1)} MB
-                      </Badge>
-                      <Button 
-                        variant="ghost" 
-                        onClick={() => removeFile(index)}
-                        className="h-8 w-8 p-0"
-                        aria-label="Remove file"
-                      >
-                        <X className="h-4 w-4 text-red-500" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                {/* Upload Destination Badge */}
+                <div className="flex items-center justify-between pt-2 border-t">
+                  <span className="text-sm font-medium text-gray-700">Upload destination:</span>
+                  <Badge variant="outline" className="font-normal">
+                    {!useExistingFolder && folderName ? (
+                      <>New folder: <span className="font-medium ml-1">{folderName}</span></>
+                    ) : selectedFolderId ? (
+                      <>Selected folder</>
+                    ) : (
+                      <>Root folder</>
+                    )}
+                  </Badge>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Upload destination and action button */}
-          {files.length > 0 && (
-            <div className="mt-6 pt-4 border-t">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-sm font-medium">Upload destination:</p>
-                <Badge variant="outline" className="font-normal">
-                  {!useExistingFolder && folderName ? (
-                    <>New folder: <span className="font-medium ml-1">{folderName}</span></>
-                  ) : selectedFolderId ? (
-                    <>Selected folder</>
+            {/* Upload Progress */}
+            {isUploading && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">
+                    Uploading... ({currentFileIndex + 1}/{totalFiles})
+                  </span>
+                  <span className="text-sm text-gray-500">
+                    {Math.round(uploadProgress)}%
+                  </span>
+                </div>
+                <Progress value={uploadProgress} className="h-2" />
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex justify-end space-x-2 pt-4">
+              <Button 
+                variant="outline" 
+                onClick={handleCancel}
+                disabled={isUploading}
+              >
+                Cancel
+              </Button>
+              {files.length > 0 && (
+                <Button 
+                  onClick={uploadFilesToAppwrite}
+                  disabled={isUploading}
+                  className="bg-primary hover:bg-primary/90"
+                >
+                  {isUploading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Uploading...
+                    </>
                   ) : (
-                    <>Root folder</>
+                    <>
+                      <Upload className="mr-2 h-4 w-4" />
+                      Upload {files.length} file{files.length > 1 ? 's' : ''}
+                    </>
                   )}
-                </Badge>
-              </div>
-            </div>
-          )}
-        </CardContent>
-        <CardFooter className="flex justify-between border-t pt-4">
-          <Button 
-            variant="outline" 
-            onClick={onCancel}
-            disabled={isUploading}
-          >
-            Cancel
-          </Button>
-          
-          {files.length > 0 && (
-            <Button 
-              onClick={uploadFilesToAppwrite} 
-              disabled={isUploading}
-              className="bg-purple-600 hover:bg-purple-700"
-            >
-              {isUploading ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Upload className="h-4 w-4 mr-2" />
+                </Button>
               )}
-              {isUploading ? `Uploading...` : `Upload`}
-            </Button>
-          )}
-        </CardFooter>
-      </Card>
-    </div>
+            </div>
+          </TabsContent>
+        </Tabs>
+      </DialogContent>
+    </Dialog>
   );
 };
 

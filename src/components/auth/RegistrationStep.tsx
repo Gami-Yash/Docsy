@@ -1,7 +1,7 @@
-
 import React from "react";
 import { Button } from "@/components/ui/button";
 import NameInput from "../NameInput";
+import Logo from "../Logo";
 
 interface RegistrationStepProps {
   email: string;
@@ -28,9 +28,10 @@ const RegistrationStep: React.FC<RegistrationStepProps> = ({
 }) => {
   return (
     <>
-      <h2 className="text-2xl font-bold text-gray-800 mb-2">Complete your profile</h2>
-      <p className="text-gray-500 mb-6">
-        Please provide your name to create your account
+      <Logo />
+      <h2 className="text-2xl font-bold text-gray-800 mb-2 text-center">Complete your profile</h2>
+      <p className="text-gray-500 mb-6 text-center">
+        Please provide your name to create your account.
       </p>
 
       {successMessage && (
@@ -56,7 +57,7 @@ const RegistrationStep: React.FC<RegistrationStepProps> = ({
         />
         <Button
           type="submit"
-          className="w-full h-12 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors"
+          className="w-full h-12 bg-primary hover:bg-primary/90 text-white rounded-lg font-medium transition-colors"
           disabled={loading}
         >
           {loading ? "Creating account..." : "Create account"}

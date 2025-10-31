@@ -1,4 +1,3 @@
-
 import React from "react";
 import { Button } from "@/components/ui/button";
 import OTPInput from "../OTPInput";
@@ -49,7 +48,7 @@ const OTPStep: React.FC<OTPStepProps> = ({
         <OTPInput length={6} value={otp} onChange={setOtp} />
         <Button
           type="submit"
-          className="w-full h-12 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors"
+          className="w-full h-12 bg-primary hover:bg-primary/90 text-white rounded-lg font-medium transition-colors"
           disabled={loading}
         >
           {loading ? "Verifying..." : "Verify account"}
@@ -59,7 +58,7 @@ const OTPStep: React.FC<OTPStepProps> = ({
       <div className="mt-6 flex flex-col items-center text-sm text-gray-500 space-y-4">
         <button
           onClick={handleResendOtp}
-          className="text-purple-600 hover:text-purple-800 font-medium"
+          className="text-primary hover:text-primary/80 font-medium"
           disabled={loading}
         >
           Resend code

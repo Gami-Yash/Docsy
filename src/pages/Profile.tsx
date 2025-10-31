@@ -10,20 +10,20 @@ import { useToast } from "@/hooks/use-toast";
 const Profile = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [user, setUser] = useState(null); // State to store the logged-in user's data
+  const [user, setUser] = useState(null); 
 
   useEffect(() => {
     const fetchUser = async () => {
       try {
         const currentUser = await getCurrentUser();
         if (currentUser) {
-          setUser(currentUser); // Set the logged-in user's data
+          setUser(currentUser); 
         } else {
-          navigate("/sign-in"); // Redirect to sign-in if no user is logged in
+          navigate("/sign-in"); 
         }
       } catch (error) {
         console.error("Error fetching user:", error);
-        navigate("/sign-in"); // Redirect to sign-in on error
+        navigate("/sign-in");
       }
     };
 
@@ -67,9 +67,9 @@ const Profile = () => {
 
         <Card className="shadow-sm border-gray-100">
           <CardHeader className="flex flex-row items-center gap-4 pb-8">
-            <Avatar className="h-20 w-20 border border-purple-100">
+            <Avatar className="h-20 w-20 border border-green-100">
               <AvatarImage src={user.avatar || ""} alt={user.name} />
-              <AvatarFallback className="bg-purple-100 text-purple-800 text-2xl">
+              <AvatarFallback className="bg-green-100 text-green-800 text-2xl">
                 {user.name.split(" ").map((part) => part[0]).join("")}
               </AvatarFallback>
             </Avatar>

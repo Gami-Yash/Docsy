@@ -136,37 +136,32 @@ const FolderChat = () => {
     setChatLoading(true);
 
     try {
-      // Get all actual fileIds from the folder's files
       const fileIds = files.map(file => file.fileID || file.$id);
       console.log("Sending chat with files:", fileIds);
       
-      // For storing in messages - use folder ID
-      await addMessage(conversationId, `folder_${folderId}`, userId, userMessage, messages.length);
+      await addMessage(conversationId, folderId!, userId!, userMessage, messages.length);
       const allMessages = [...messages, userMessage];
       
-      // Send request with ALL file IDs in the folder and pass folder context
       const response = await sendChatRequest(
         allMessages, 
         fileIds, 
-        userId, 
-        true, 
+        userId,
+        true,
         folderId
       );
-      
+
       const assistantMessage: ChatMessage = {
         role: "assistant",
         content: response,
       };
-      
+
       setMessages((prev) => [...prev, assistantMessage]);
-      
-      // Also store the assistant's response
-      await addMessage(conversationId, `folder_${folderId}`, userId, assistantMessage, allMessages.length);
+      await addMessage(conversationId, folderId!, userId!, assistantMessage, messages.length + 1);
     } catch (error) {
-      console.error("Error sending message:", error);
+      console.error("Error in folder chat:", error);
       toast({
         title: "Error",
-        description: "Failed to get a response. Please try again.",
+        description: "Failed to get a response from the AI. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -174,11 +169,18 @@ const FolderChat = () => {
     }
   };
 
-  return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-gray-50 to-white p-4 md:p-8">
-      <div className="absolute inset-0 bg-grid-slate-100 [mask-image:linear-gradient(0deg,#fff,rgba(255,255,255,0.6))] pointer-events-none"></div>
+  // Handle Enter key press
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (!userInput.trim() || chatLoading || !conversationId || files.length === 0) return;
+      handleSubmit(e as any);
+    }
+  };
 
-      <div className="relative max-w-7xl mx-auto z-10">
+  return (
+    <div className="min-h-screen w-full bg-gray-50">
+      <div className="relative max-w-7xl mx-auto p-4 md:p-8">
         {/* Header */}
         <div className="flex items-center mb-6">
           <Button variant="ghost" size="icon" onClick={() => navigate("/dashboard")} className="mr-2">
@@ -187,18 +189,19 @@ const FolderChat = () => {
           <h1 className="text-2xl font-bold text-gray-800">Folder: {folderName}</h1>
         </div>
 
-        {/* Main content grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        {/* Main content with FIXED height */}
+        <div className="h-[600px] grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Left sidebar for files */}
-          <div>
-            <Card className="mb-8">
-              <CardHeader>
-                <CardTitle>Files in This Folder</CardTitle>
+          <div className="md:col-span-1">
+            <Card className="h-full flex flex-col">
+              <CardHeader className="pb-4 flex-shrink-0">
+                <CardTitle className="text-lg">Files in This Folder</CardTitle>
                 <CardDescription>
                   {files.length} {files.length === 1 ? 'file' : 'files'} available for chat
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="flex-1 overflow-auto p-4">
+                {/* Files list content - same as before */}
                 {isLoading ? (
                   <div className="flex items-center justify-center py-4">
                     <Loader2 className="h-6 w-6 animate-spin mr-2" />
@@ -211,8 +214,16 @@ const FolderChat = () => {
                 ) : (
                   <div className="space-y-2">
                     {files.map((file) => (
-                      <div key={file.$id} className="flex items-center p-2 rounded-md bg-gray-50">
-                        <span className="text-sm font-medium">{file.fileName}</span>
+                      <div key={file.$id} className="flex items-center p-3 rounded-md bg-gray-50 hover:bg-gray-100 transition-colors">
+                        <div className="p-2 bg-red-50 rounded-lg mr-3 flex-shrink-0">
+                          <svg className="h-4 w-4 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm font-medium text-gray-900 truncate block">{file.fileName}</span>
+                          <span className="text-xs text-gray-500">PDF Document</span>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -221,72 +232,98 @@ const FolderChat = () => {
             </Card>
           </div>
 
-          {/* Chat area */}
+          {/* Chat area with FIXED height */}
           <div className="md:col-span-2">
-            <Card className="h-[calc(100vh-12rem)]">
-              <CardHeader>
-                <CardTitle>Chat with Folder</CardTitle>
+            <Card className="h-full flex flex-col">
+              <CardHeader className="flex-shrink-0 pb-4">
+                <CardTitle className="text-lg">Chat with Folder</CardTitle>
                 <CardDescription>
                   Ask questions about any document in this folder
                 </CardDescription>
               </CardHeader>
-              <CardContent className="flex-grow overflow-auto">
-                {initializing ? (
-                  <div className="flex items-center justify-center h-full text-gray-500">
-                    <Loader2 className="h-6 w-6 animate-spin mr-2" />
-                    <span>Loading conversation...</span>
-                  </div>
-                ) : initError ? (
-                  <div className="flex flex-col items-center justify-center h-full text-gray-500">
-                    <p className="text-red-500 mb-4">{initError}</p>
-                    <Button onClick={initializeChat} className="flex items-center gap-2" variant="outline">
-                      <RefreshCw className="h-4 w-4" /> Retry
-                    </Button>
-                  </div>
-                ) : messages.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                    <p>No messages yet. Start by sending a message below.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {messages.map((msg, index) => (
-                      <div
-                        key={index}
-                        className={`p-3 rounded-lg ${
-                          msg.role === "user"
-                            ? "bg-purple-100 ml-12"
-                            : msg.role === "assistant"
-                            ? "bg-gray-100 mr-12"
-                            : "bg-blue-50 text-sm"
-                        }`}
-                      >
-                        <p className="whitespace-pre-wrap">{msg.content}</p>
+
+              {/* Messages area - FIXED height with scroll */}
+              <div className="flex-1 min-h-0 px-4 overflow-hidden">
+                <div className="h-[400px] overflow-y-auto border rounded-md bg-white">
+                  <div className="p-4 space-y-4">
+                    {initializing ? (
+                      <div className="flex items-center justify-center h-32 text-gray-500">
+                        <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                        <span>Loading conversation...</span>
                       </div>
-                    ))}
-                    {chatLoading && (
-                      <div className="p-3 rounded-lg bg-gray-100 mr-12 flex items-center">
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        <p>Thinking...</p>
+                    ) : initError ? (
+                      <div className="flex flex-col items-center justify-center h-32 text-gray-500">
+                        <p className="text-red-500 mb-4 text-center">{initError}</p>
+                        <Button onClick={initializeChat} className="flex items-center gap-2" variant="outline">
+                          <RefreshCw className="h-4 w-4" /> Retry
+                        </Button>
                       </div>
+                    ) : messages.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-32 text-gray-400">
+                        <div className="text-center">
+                          <div className="h-12 w-12 bg-gray-100 rounded-lg flex items-center justify-center mx-auto mb-4">
+                          </div>
+                          <p className="text-sm font-medium mb-2">No messages yet</p>
+                          <p className="text-xs">Start by sending a message below</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        {messages.map((msg, index) => (
+                          <div
+                            key={index}
+                            className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                          >
+                            <div
+                              className={`max-w-[85%] p-3 rounded-lg ${
+                                msg.role === "user"
+                                  ? "bg-green-500 text-white rounded-br-sm"
+                                  : "bg-white border border-gray-200 text-gray-800 rounded-bl-sm shadow-sm"
+                              }`}
+                            >
+                              <div className="whitespace-pre-wrap text-sm leading-relaxed">{msg.content}</div>
+                              {msg.role === "assistant" && (
+                                <div className="text-xs text-gray-400 mt-2 opacity-70">AI Assistant</div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+
+                        {chatLoading && (
+                          <div className="flex justify-start">
+                            <div className="bg-white border border-gray-200 p-3 rounded-lg rounded-bl-sm shadow-sm flex items-center">
+                              <div className="flex space-x-1">
+                                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                              </div>
+                              <span className="text-sm ml-3 text-gray-600">AI is thinking...</span>
+                            </div>
+                          </div>
+                        )}
+                        <div ref={messagesEndRef} />
+                      </>
                     )}
-                    <div ref={messagesEndRef} />
                   </div>
-                )}
-              </CardContent>
-              <CardFooter className="border-t p-4">
-                <form onSubmit={handleSubmit} className="flex gap-2 w-full">
+                </div>
+              </div>
+              
+              {/* Input Area - FIXED at bottom */}
+              <CardFooter className="border-t p-4 flex-shrink-0 bg-gray-50">
+                <form onSubmit={handleSubmit} className="flex gap-3 w-full">
                   <Textarea
                     value={userInput}
                     onChange={(e) => setUserInput(e.target.value)}
-                    placeholder="Type your message here..."
-                    className="flex-1 resize-none"
+                    onKeyPress={handleKeyPress}
+                    placeholder="Type your message here... (Press Enter to send, Shift+Enter for new line)"
+                    className="flex-1 resize-none min-h-[50px] max-h-24 bg-white"
                     rows={2}
                     disabled={initializing || !conversationId || !!initError || files.length === 0}
                   />
                   <Button
                     type="submit"
                     disabled={!userInput.trim() || chatLoading || initializing || !conversationId || !!initError || files.length === 0}
-                    className="bg-purple-600 hover:bg-purple-700 self-end"
+                    className="bg-green-600 hover:bg-green-700 self-end px-6 py-3 h-auto min-h-[50px] rounded-lg"
                   >
                     {chatLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                   </Button>

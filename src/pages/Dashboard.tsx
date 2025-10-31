@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { motion } from "framer-motion";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,19 +8,21 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, File, User, MessageSquare, RefreshCw } from "lucide-react";
+import { Upload, File, User, MessageSquare, RefreshCw, Loader2 , Plus, 
+  Folder  } from "lucide-react";
 import FileUploader from "@/components/FileUploader";
 import { getCurrentUser, logout } from "@/lib/appwrite/auth";
 import { getFilesByUserId, getFoldersByUserId, getFilesByFolderId } from "@/lib/appwrite/databases";
 import FolderManager from "@/components/FolderManager";
 import CreateFolderDialog from "@/components/CreateFolderDialog";
 
+
 const Dashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [showUploader, setShowUploader] = useState(false);
-  const [user, setUser] = useState(null); // State to store the logged-in user's data
-  const [files, setFiles] = useState([]); // State to store the user's files
+  const [user, setUser] = useState(null);
+  const [files, setFiles] = useState([]);
   const [folders, setFolders] = useState<any[]>([]);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [selectedFolderName, setSelectedFolderName] = useState<string>("");
@@ -27,20 +30,55 @@ const Dashboard = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [folderNameMap, setFolderNameMap] = useState<{[key: string]: string}>({});
 
+  // Animation variants
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1
+      }
+    }
+  };
+
+  const itemVariants = {
+    hidden: { y: 20, opacity: 0 },
+    visible: {
+      y: 0,
+      opacity: 1,
+      transition: {
+        duration: 0.5,
+        ease: "easeOut"
+      }
+    }
+  };
+
+  const cardVariants = {
+    hidden: { scale: 0.95, opacity: 0 },
+    visible: {
+      scale: 1,
+      opacity: 1,
+      transition: {
+        duration: 0.3,
+        ease: "easeOut"
+      }
+    }
+  };
+
   // Fetch the logged-in user's data
   useEffect(() => {
     const fetchUser = async () => {
       try {
         const currentUser = await getCurrentUser();
         if (currentUser) {
-          setUser(currentUser); // Set the logged-in user's data
-          fetchUserFiles(currentUser.$id); // Fetch files for the user
+          setUser(currentUser);
+          fetchUserFiles(currentUser.$id);
         } else {
-          navigate("/sign-in"); // Redirect to sign-in if no user is logged in
+          navigate("/sign-in");
         }
       } catch (error) {
         console.error("Error fetching user:", error);
-        navigate("/sign-in"); // Redirect to sign-in on error
+        navigate("/sign-in");
       }
     };
 
@@ -50,16 +88,16 @@ const Dashboard = () => {
   // Fetch files for the logged-in user
   const fetchUserFiles = async (userId) => {
     try {
-      const userFiles = await getFilesByUserId(userId); // Fetch files from Appwrite
+      const userFiles = await getFilesByUserId(userId);
       const formattedFiles = userFiles.map((file) => ({
         id: file.$id,
         name: file.fileName,
-        size: formatFileSize(file.size), // Format the size properly
-        lastOpened: new Date(file.$createdAt).toISOString().split("T")[0], // Use $createdAt for the date
+        size: formatFileSize(file.size),
+        lastOpened: new Date(file.$createdAt).toISOString().split("T")[0],
         status: "Unread",
         url: file.url,
       }));
-      setFiles(formattedFiles); // Update the files state
+      setFiles(formattedFiles);
     } catch (error) {
       console.error("Error fetching user files:", error);
       toast({
@@ -81,38 +119,68 @@ const Dashboard = () => {
     return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${sizes[i]}`;
   };
 
-  // Handle new file upload - modified to handle batch uploads
-  const handleNewFile = (fileData) => {
-    // Add the new file to the existing files array
-    const newFile = {
-      id: fileData.$id, 
-      name: fileData.name,
-      size: formatFileSize(fileData.size),
-      lastOpened: new Date().toISOString().split("T")[0],
-      status: "Unread",
-      url: fileData.url,
-    };
+  // Handle new file upload - modified to handle batch uploads and folder creation
+  const handleNewFile = async (data) => {
+    console.log("handleNewFile called with:", data);
+    
+    // Check if this is a folder creation
+    if (data.name && !data.fileName) {
+      // This is a folder, add it to the folders list
+      setFolders(prevFolders => {
+        const updatedFolders = [...prevFolders, data];
+        
+        // Update folder name mapping
+        const newMapping = { ...folderNameMap };
+        newMapping[data.$id] = data.name;
+        setFolderNameMap(newMapping);
+        
+        return updatedFolders;
+      });
+      
+      console.log("Added new folder to state:", data.name);
+      return;
+    }
+    
+    // This is a file upload
+    if (Array.isArray(data)) {
+      // Handle multiple files
+      const formattedFiles = data.map((file) => ({
+        id: file.$id || file.id,
+        name: file.fileName || file.name,
+        size: formatFileSize(file.size),
+        lastOpened: new Date().toISOString().split("T")[0],
+        status: "New",
+        url: file.url,
+        folderId: file.folders
+      }));
+      
+      setFiles(prevFiles => [...prevFiles, ...formattedFiles]);
+    } else {
+      // Handle single file
+      const formattedFile = {
+        id: data.$id || data.id,
+        name: data.fileName || data.name,
+        size: formatFileSize(data.size),
+        lastOpened: new Date().toISOString().split("T")[0],
+        status: "New",
+        url: data.url,
+        folderId: data.folders
+      };
+      
+      setFiles(prevFiles => [...prevFiles, formattedFile]);
+    }
+  };
 
-    // Add the file to the existing files
-    setFiles(prevFiles => [...prevFiles, newFile]);
-
-    // Don't close the uploader immediately for batch uploads
-    // The uploader will close itself after all files are processed
+  const handleCloseUploader = () => {
+    setShowUploader(false);
   };
 
   const handleLogout = async () => {
     try {
-      await logout(); 
-      setUser(null); 
-      setFiles([]); 
-      navigate("/sign-in"); 
+      await logout();
+      navigate("/");
     } catch (error) {
-      console.error("Error logging out:", error);
-      toast({
-        title: "Error",
-        description: "Failed to log out. Please try again.",
-        variant: "destructive",
-      });
+      console.error("Error during logout:", error);
     }
   };
 
@@ -261,186 +329,207 @@ const Dashboard = () => {
   };
 
   if (!user) {
-    return <div>Loading...</div>; 
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-gray-50 to-white">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-800 mb-2">Loading Dashboard</h3>
+          <p className="text-sm text-gray-500">Preparing your workspace...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-white p-4 md:p-8">
-      <div className="absolute inset-0 bg-grid-slate-100 [mask-image:linear-gradient(0deg,#fff,rgba(255,255,255,0.6))] pointer-events-none"></div>
-
-      <div className="relative max-w-7xl mx-auto z-10">
-        {/* Header section with profile summary */}
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-8 gap-4">
-          <div className="flex items-center gap-4">
-            <Avatar className="h-16 w-16 border border-purple-100">
-              <AvatarImage src={user.avatar || ""} alt={user.name} />
-              <AvatarFallback className="bg-purple-100 text-purple-800 text-xl">
-                {user.name.split(" ").map((part) => part[0]).join("")}
-              </AvatarFallback>
-            </Avatar>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-800">Welcome, {user.name}</h1>
-              <p className="text-gray-500">{user.email}</p>
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <motion.div 
+          className="bg-white border-b border-gray-200 px-6 py-4"
+          initial={{ y: -20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.3 }}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Avatar className="h-12 w-12">
+                <AvatarImage src={user.avatar || ""} alt={user.name} />
+                <AvatarFallback className="bg-green-100 text-green-700">
+                  {user.name.split(" ").map((part) => part[0]).join("")}
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <h1 className="text-xl font-semibold text-gray-900">Welcome, {user.name}</h1>
+                <p className="text-sm text-gray-500">{user.email}</p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <Button variant="outline" onClick={handleLogout}>
+                <User className="mr-2 h-4 w-4" />
+                Logout
+              </Button>
+              <Button onClick={() => setShowUploader(true)} className="bg-green-600 hover:bg-green-700">
+                <Upload className="mr-2 h-4 w-4" />
+                Upload PDF
+              </Button>
             </div>
           </div>
-          <div className="flex gap-3 w-full md:w-auto">
-            <Button
-              variant="outline"
-              className="flex-1 md:flex-none"
-              onClick={handleLogout}
-            >
-              <User className="mr-2 h-4 w-4" />
-              Logout
-            </Button>
-            <Button
-              className="flex-1 md:flex-none bg-purple-600 hover:bg-purple-700"
-              onClick={() => setShowUploader(true)}
-            >
-              <Upload className="mr-2 h-4 w-4" />
-              Upload PDF
-            </Button>
-            <Button
-              className="flex-1 md:flex-none bg-purple-600 hover:bg-purple-700 ml-2"
-              onClick={() => navigate("/ai")}
-            >
-              <MessageSquare className="mr-2 h-4 w-4" />
-              AI Chat
-            </Button>
-          </div>
-        </div>
+        </motion.div>
 
-        {/* File uploader dialog */}
-        {showUploader && (
-          <FileUploader 
-            onFileUpload={handleNewFile} 
-            onCancel={() => setShowUploader(false)}
-            selectedFolderId={selectedFolderId}
-            onFolderCreated={handleFolderCreated} // Add this line
-          />
-        )}
+        {/* Main Content */}
+        <div className="flex h-[calc(100vh-5rem)]">
+          {/* Sidebar */}
+          <motion.div 
+            className="w-80 bg-white border-r border-gray-200 flex flex-col"
+            initial={{ x: -20, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            transition={{ duration: 0.3, delay: 0.1 }}
+          >
+            {/* Use FolderManager instead of manual folder rendering */}
+            <div className="p-6">
+              <FolderManager
+                onFolderSelect={handleFolderSelect}
+                selectedFolderId={selectedFolderId}
+                onCreateNewFolder={() => setShowFolderDialog(true)}
+                folders={folders}
+                isLoading={isLoading}
+                onChatWithFolder={handleChatWithFolder} // This is the key prop!
+              />
+            </div>
+          </motion.div>
 
-        {/* Folder creation dialog - new */}
-        <CreateFolderDialog
-          open={showFolderDialog}
-          onOpenChange={setShowFolderDialog}
-          onFolderCreated={handleFolderCreated}
-          selectedFolderId={selectedFolderId}
-        />
+          {/* Main Content Area */}
+          <motion.div 
+            className="flex-1 flex flex-col bg-gray-50"
+            initial={{ x: 20, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            transition={{ duration: 0.3, delay: 0.2 }}
+          >
+            {/* Content Header */}
+            <div className="bg-white border-b border-gray-200 px-6 py-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900">
+                    {selectedFolderId ? selectedFolderName : "Your PDF Library"}
+                  </h2>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {selectedFolderId 
+                      ? `Files in the ${selectedFolderName} folder`
+                      : "Access and chat with your uploaded PDF documents"
+                    }
+                  </p>
+                </div>
+                {!selectedFolderId && (
+                  <Button
+                    onClick={() => setShowUploader(true)}
+                    className="bg-green-600 hover:bg-green-700"
+                  >
+                    <Upload className="mr-2 h-4 w-4" />
+                    Upload PDF
+                  </Button>
+                )}
+              </div>
+            </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8 max-w-7xl mx-auto">
-          {/* Folder sidebar - new */}
-          <div className="md:col-span-1">
-            <FolderManager 
-              onFolderSelect={handleFolderSelect} 
-              selectedFolderId={selectedFolderId}
-              onCreateNewFolder={() => setShowFolderDialog(true)}
-              folders={folders}
-              isLoading={isLoading}
-              onChatWithFolder={handleChatWithFolder} // Add this prop
-            />
-            
-            <Button 
-              variant="outline" 
-              className="w-full mb-4"
-              onClick={fetchFiles}
-            >
-              <RefreshCw className="mr-2 h-4 w-4" />
-              Show All Files
-            </Button>
-          </div>
-          
-          {/* Main content area */}
-          <div className="md:col-span-3">
-            <Card className="mb-8 shadow-sm border-gray-100">
-              <CardHeader>
-                <CardTitle className="text-gray-800">
-                  {selectedFolderId 
-                    ? `Folder: ${selectedFolderName}` 
-                    : "Your PDF Library"}
-                </CardTitle>
-                <CardDescription>
-                  {selectedFolderId
-                    ? "Files in this folder"
-                    : "Access and chat with your uploaded PDF documents"}
-                </CardDescription>
-                <Button
-                  onClick={() => setShowUploader(true)}
-                  className="bg-purple-600 hover:bg-purple-700"
-                >
-                  <Upload className="mr-2 h-4 w-4" />
-                  Upload PDF {selectedFolderId ? "to this folder" : ""}
-                </Button>
-              </CardHeader>
-              <CardContent>
-                <div className="bg-white shadow-sm border rounded-lg overflow-hidden">
-                  <div className="grid grid-cols-5 border-b p-4 bg-gray-50 font-medium text-sm text-gray-600">
-                    <div>Name</div>
-                    <div>Size</div>
-                    <div>Folder</div> {/* Added Folder column */}
-                    <div>Last Opened</div>
-                    <div>Actions</div>
+            {/* Files List */}
+            <div className="flex-1 overflow-hidden">
+              {files.length === 0 ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center">
+                    <File className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No files found</h3>
+                    <p className="text-gray-500 mb-6">Upload your first PDF to get started.</p>
+                    <Button
+                      onClick={() => setShowUploader(true)}
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      <Upload className="mr-2 h-4 w-4" />
+                      Upload PDF
+                    </Button>
                   </div>
-
-                  {isLoading ? (
-                    <div className="p-8 text-center text-gray-500">Loading files...</div>
-                  ) : files.length === 0 ? (
-                    <div className="p-8 text-center text-gray-500">
-                      <p>No files found.</p>
-                      <p className="mt-2 text-sm">Upload your first PDF to get started.</p>
-                    </div>
-                  ) : (
-                    files.map((file) => (
-                      <div key={file.id} className="grid grid-cols-5 border-b p-4 items-center text-sm">
-                        <div className="flex items-center">
-                          <File className="h-4 w-4 text-purple-500 mr-2" />
-                          <Link
-                            to={`/chat/${file.id}`}
-                            className="text-blue-600 hover:underline"
-                            state={{ pdfUrl: file.url, fileName: file.name }}
-                          >
-                            {file.name}
-                          </Link>
-                          {file.status === "Unread" && (
-                            <span className="inline-block bg-blue-100 text-blue-800 text-xs font-medium px-2 py-0.5 rounded-full ml-2">
-                              New
-                            </span>
-                          )}
-                        </div>
-                        <div>{file.size}</div>
-                        <div>
-                          {file.folderId && folderNameMap[file.folderId] ? (
-                            <Badge variant="outline" className="font-normal">
-                              {folderNameMap[file.folderId]}
-                            </Badge>
-                          ) : (
-                            "-"
-                          )}
-                        </div>
-                        <div>{file.lastOpened}</div>
-                        <div>
-                          <Button 
-                            variant="ghost" 
+                </div>
+              ) : (
+                <div className="h-full overflow-y-auto">
+                  <div className="p-6 space-y-3">
+                    {files.map((file, index) => (
+                      <motion.div
+                        key={file.id}
+                        className="bg-white rounded-lg border border-gray-200 hover:border-gray-300 hover:shadow-sm transition-all duration-200"
+                        initial={{ y: 20, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        transition={{ duration: 0.3, delay: index * 0.05 }}
+                        whileHover={{ y: -2 }}
+                      >
+                        <div className="p-4 flex items-center justify-between">
+                          <div className="flex items-center gap-4 flex-1 min-w-0">
+                            <div className="p-3 bg-red-50 rounded-lg">
+                              <File className="h-6 w-6 text-red-500" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <Link
+                                to={`/chat/${file.id}`}
+                                state={{ pdfUrl: file.url, fileName: file.name }}
+                                className="block"
+                              >
+                                <h3 className="font-medium text-gray-900 hover:text-blue-600 transition-colors truncate">
+                                  {file.name}
+                                </h3>
+                                <div className="flex items-center gap-4 mt-1 text-sm text-gray-500">
+                                  <span>{file.size}</span>
+                                  <span>•</span>
+                                  <span>{file.lastOpened}</span>
+                                  {file.status === "New" && (
+                                    <>
+                                      <span>•</span>
+                                      <span className="bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs font-medium">
+                                        New
+                                      </span>
+                                    </>
+                                  )}
+                                </div>
+                              </Link>
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
                             size="sm"
-                            className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
                             onClick={() => handleChatWithPdf(file)}
+                            className="text-green-600 hover:text-green-700 hover:bg-green-50 ml-4"
                           >
+                            <MessageSquare className="h-4 w-4 mr-2" />
                             Chat
                           </Button>
                         </div>
-                      </div>
-                    ))
-                  )}
+                      </motion.div>
+                    ))}
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
+              )}
+            </div>
+          </motion.div>
         </div>
 
-        <Separator className="my-8" />
+        {/* File Uploader Dialog */}
+        <FileUploader
+          isOpen={showUploader}
+          onClose={handleCloseUploader}
+          onFileUploaded={handleNewFile}
+          userId={user.$id}
+          selectedFolderId={selectedFolderId}
+        />
 
-        <footer className="text-center text-xs text-gray-500">
-          <p>© 2025 PDF Chat App. All rights reserved.</p>
-        </footer>
+        {/* Create Folder Dialog */}
+        <CreateFolderDialog
+          open={showFolderDialog}
+          onOpenChange={setShowFolderDialog}
+          userId={user.$id}
+          onFolderCreated={(newFolder) => {
+            setFolders(prevFolders => [...prevFolders, newFolder]);
+            const newMapping = { ...folderNameMap };
+            newMapping[newFolder.$id] = newFolder.name;
+            setFolderNameMap(newMapping);
+          }}
+        />
       </div>
     </div>
   );

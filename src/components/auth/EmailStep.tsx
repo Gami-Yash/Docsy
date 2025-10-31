@@ -1,4 +1,3 @@
-
 import React from "react";
 import { Button } from "@/components/ui/button";
 import EmailInput from "../EmailInput";
@@ -72,7 +71,7 @@ const EmailStep: React.FC<EmailStepProps> = ({
         
         <Button
           type="submit"
-          className="w-full h-12 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors"
+          className="w-full h-12 bg-primary hover:bg-primary/90 text-white rounded-lg font-medium transition-colors"
           disabled={loading}
         >
           {loading ? "Processing..." : isRegistering ? "Continue" : "Continue with email"}
@@ -82,7 +81,7 @@ const EmailStep: React.FC<EmailStepProps> = ({
       <div className="mt-6 text-center">
         <button
           onClick={toggleAuthMode}
-          className="text-purple-600 hover:text-purple-800 font-medium text-sm"
+          className="text-primary hover:text-primary/80 font-medium text-sm"
         >
           {isRegistering
             ? "Already have an account? Sign in"

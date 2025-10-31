@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect } from 'react';
 import { Label } from "@/components/ui/label";
 
@@ -77,7 +76,7 @@ const OTPInput = ({ length, value, onChange }: OTPInputProps) => {
             onChange={(e) => handleChange(e, index)}
             onKeyDown={(e) => handleKeyDown(e, index)}
             onPaste={handlePaste}
-            className="w-12 h-14 text-center text-xl font-semibold border border-gray-300 rounded-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-500 focus:outline-none transition-all"
+            className="w-12 h-14 text-center text-xl font-semibold border border-gray-300 rounded-lg focus:border-primary focus:ring-2 focus:ring-primary focus:outline-none transition-all"
           />
         ))}
       </div>

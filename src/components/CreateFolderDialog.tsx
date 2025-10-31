@@ -12,50 +12,32 @@ import {
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { createFolder } from '@/lib/appwrite/databases';
-import { getCurrentUser } from '@/lib/appwrite/auth';
 
 interface CreateFolderDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onFolderCreated: (folder: any) => void;
-  selectedFolderId?: string | null; // Add this to know which folder is selected
+  userId: string; // Add this prop
+  onFolderCreated: (newFolder: any) => void;
 }
 
 const CreateFolderDialog: React.FC<CreateFolderDialogProps> = ({
   open,
   onOpenChange,
+  userId, // Accept userId as a prop
   onFolderCreated,
-  selectedFolderId,
 }) => {
   const [folderName, setFolderName] = useState('');
   const [description, setDescription] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const { toast } = useToast();
-  const [user, setUser] = useState<any | null>(null);
 
   // Reset form when dialog opens
   useEffect(() => {
     if (open) {
       setFolderName('');
       setDescription('');
-      
-      const fetchUser = async () => {
-        try {
-          const currentUser = await getCurrentUser();
-          setUser(currentUser);
-        } catch (error) {
-          console.error("Error fetching user:", error);
-          toast({
-            title: 'Error',
-            description: 'Failed to get user information',
-            variant: 'destructive',
-          });
-        }
-      };
-
-      fetchUser();
     }
-  }, [open, toast]);
+  }, [open]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,19 +51,10 @@ const CreateFolderDialog: React.FC<CreateFolderDialogProps> = ({
       return;
     }
 
-    if (!user?.$id) {
-      toast({
-        title: 'Error',
-        description: 'You must be logged in to create folders',
-        variant: 'destructive',
-      });
-      return;
-    }
-
     setIsCreating(true);
     
     try {
-      const newFolder = await createFolder(folderName, description, user.$id);
+      const newFolder = await createFolder(folderName, description, userId); // Pass userId to the folder creation logic
       
       toast({
         title: 'Success',

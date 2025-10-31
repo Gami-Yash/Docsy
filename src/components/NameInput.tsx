@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,7 +21,7 @@ const NameInput = ({ value, onChange, error }: NameInputProps) => {
         value={value}
         onChange={onChange}
         className={`h-12 px-4 border ${
-          error ? 'border-red-500 focus:ring-red-500' : 'border-gray-200 focus:ring-purple-500'
+          error ? 'border-red-500 focus:ring-red-500' : 'border-gray-200 focus:ring-primary'
         } rounded-lg focus:ring-2 transition-all duration-200`}
       />
       {error && <p className="text-sm text-red-500">{error}</p>}
