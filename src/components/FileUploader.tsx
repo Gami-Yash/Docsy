@@ -10,6 +10,7 @@ import { extractTextFromPDF } from "@/services/PdfProcessingService";
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import mammoth from "mammoth"; // Import mammoth for DOCX processing
 
 // Extend HTMLInputElement to include webkitdirectory and directory attributes
 declare module 'react' {
@@ -114,13 +115,15 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   };
 
   const validateAndSetFiles = (filesToValidate: File[]) => {
-    // Filter for PDF files only
-    const validFiles = filesToValidate.filter(file => file.type === 'application/pdf');
-    
+    const validFiles = filesToValidate.filter((file) => {
+      const extension = file.name.split('.').pop()?.toLowerCase();
+      return ['pdf', 'txt', 'docx'].includes(extension); // Ensure 'txt' is included
+    });
+
     if (validFiles.length !== filesToValidate.length) {
       toast({
         title: "Some files were skipped",
-        description: "Only PDF files are allowed",
+        description: "Only PDF, TXT, and DOCX files are allowed",
         variant: "default",
       });
     }
@@ -128,16 +131,15 @@ const FileUploader: React.FC<FileUploaderProps> = ({
     if (validFiles.length === 0) {
       toast({
         title: "No valid files",
-        description: "Please select PDF files only",
+        description: "Please select PDF, TXT, or DOCX files only",
         variant: "destructive",
       });
       return;
     }
 
-    // Check file sizes
     const maxSize = 10 * 1024 * 1024; // 10MB
-    const validSizedFiles = validFiles.filter(file => file.size <= maxSize);
-    
+    const validSizedFiles = validFiles.filter((file) => file.size <= maxSize);
+
     if (validSizedFiles.length !== validFiles.length) {
       toast({
         title: "Some files were skipped",
@@ -190,28 +192,80 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   // Process a single PDF file for vector database
   async function processPdfForVectorDB(fileUrl: string, fileId: string, documentId: string, userId: string, folderId?: string) {
     try {
-      console.log("Processing PDF for vector DB with fileId:", fileId, "documentId:", documentId, "userId:", userId);
-      
-      // Store raw IDs for debugging
-      localStorage.setItem('last_processed_fileId', fileId);
-      if (documentId) localStorage.setItem('last_processed_documentId', documentId);
-      
-      // Extract text from PDF
+      console.log("Processing file for vector DB with fileId:", fileId, "documentId:", documentId, "userId:", userId);
+
+      // Fetch the file content
       const response = await fetch(fileUrl);
       const arrayBuffer = await response.arrayBuffer();
-      const pageTexts = await extractTextFromPDF(arrayBuffer);
+
+      let pageTexts: string[] = [];
+
+      // FIXED: Get file extension from the actual file metadata, not from URL
+      // First, try to get the file document to get the real filename
+      let extension = '';
+      try {
+        const { databases } = await import("@/lib/appwrite/databases");
+        const fileDoc = await databases.getDocument(
+          import.meta.env.VITE_APPWRITE_DATABASE,
+          import.meta.env.VITE_APPWRITE_FILES_COLLECTION,
+          documentId
+        );
+        
+        // Extract extension from the fileName field
+        const fileName = fileDoc.fileName || '';
+        extension = fileName.split('.').pop()?.toLowerCase() || '';
+        console.log("Got extension from fileName:", extension, "from file:", fileName);
+      } catch (error) {
+        console.error("Could not get file metadata, will try URL parsing:", error);
+        // Fallback: try to extract from URL (remove /view and query params)
+        const urlWithoutView = fileUrl.split('/view')[0];
+        const urlParts = urlWithoutView.split('/');
+        const lastPart = urlParts[urlParts.length - 1];
+        extension = lastPart.split('.').pop()?.toLowerCase() || '';
+      }
       
+      console.log("Processing file with extension:", extension);
+
+      if (!extension || !['pdf', 'txt', 'docx'].includes(extension)) {
+        console.error("Unsupported or missing file type:", extension);
+        throw new Error(`Unsupported file type: ${extension || 'unknown'}`);
+      }
+
+      if (extension === 'pdf') {
+        console.log("Extracting text from PDF");
+        pageTexts = await extractTextFromPDF(arrayBuffer);
+      } else if (extension === 'txt') {
+        console.log("Extracting text from TXT file");
+        const text = new TextDecoder().decode(arrayBuffer);
+        pageTexts = [text];
+      } else if (extension === 'docx') {
+        console.log("Extracting text from DOCX file");
+        const result = await mammoth.extractRawText({ arrayBuffer });
+        pageTexts = [result.value];
+      }
+
+      // Validate that we have text content
+      if (!pageTexts || pageTexts.length === 0 || pageTexts.every(text => !text.trim())) {
+        throw new Error("No text content extracted from file");
+      }
+
+      console.log(`Extracted ${pageTexts.length} page(s) of text`);
+
       // Split text into chunks
       const textSplitter = new RecursiveCharacterTextSplitter({
         chunkSize: 1000,
-        chunkOverlap: 200
+        chunkOverlap: 200,
       });
-      
+
       let allChunks = [];
-      
       for (let pageIdx = 0; pageIdx < pageTexts.length; pageIdx++) {
-        const chunks = await textSplitter.splitText(pageTexts[pageIdx]);
+        const pageText = pageTexts[pageIdx];
+        if (!pageText || !pageText.trim()) {
+          console.log(`Skipping empty page ${pageIdx + 1}`);
+          continue;
+        }
         
+        const chunks = await textSplitter.splitText(pageText);
         const chunkObjects = chunks.map((chunk, chunkIdx) => ({
           text: chunk,
           metadata: {
@@ -219,24 +273,27 @@ const FileUploader: React.FC<FileUploaderProps> = ({
             page: pageIdx + 1,
             chunk: chunkIdx,
             userId: userId,
-            folderId: folderId || null
-          }
+            folderId: folderId || null,
+          },
         }));
-        
         allChunks = [...allChunks, ...chunkObjects];
       }
-      
+
+      if (allChunks.length === 0) {
+        throw new Error("No text chunks created from file");
+      }
+
       console.log("Storing embeddings with fileId:", fileId, "documentId:", documentId, "with", allChunks.length, "chunks");
-      
+
       // Store embeddings in vector database
       const { storeEmbeddings } = await import("@/services/VectorService");
       await storeEmbeddings(allChunks, documentId || fileId);
-      
-      console.log("Successfully processed and stored PDF embeddings");
+
+      console.log("Successfully processed and stored file embeddings");
       return true;
     } catch (error) {
-      console.error("Error processing PDF:", error);
-      return false;
+      console.error("Error processing file:", error);
+      throw error;
     }
   }
 
@@ -332,14 +389,28 @@ const FileUploader: React.FC<FileUploaderProps> = ({
 
         const fileUrl = constructFileUrl(bucketFile.$id);
         
-        // 5. Process PDF for vector database in the background
-        processPdfForVectorDB(
-          fileUrl, 
-          bucketFile.$id, 
-          newFileDoc.$id, 
-          userId, 
-          targetFolderId || ""
-        );
+        // 5. Process file for vector database in the background
+        try {
+          await processPdfForVectorDB(
+            fileUrl, 
+            bucketFile.$id, 
+            newFileDoc.$id, 
+            userId, 
+            targetFolderId || ""
+          );
+          
+          toast({
+            title: `Successfully uploaded ${file.name}`,
+            description: "File is ready for chat",
+          });
+        } catch (processingError) {
+          console.error(`Error processing file ${file.name}:`, processingError);
+          toast({
+            title: `File uploaded but processing failed`,
+            description: `${file.name} was uploaded but couldn't be processed for chat. Please try re-uploading.`,
+            variant: "destructive",
+          });
+        }
         
         // 6. Notify parent component about the uploaded file
         const fileData = {
@@ -487,7 +558,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".pdf"
+                  accept=".pdf,.txt,.docx"
                   multiple
                   onChange={handleFileInputChange}
                   className="hidden"
@@ -635,7 +706,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
                   multiple
                   onChange={handleFolderInputChange}
                   className="hidden"
-                  accept=".pdf"
+                  accept=".pdf,.txt,.docx"
                 />
               </div>
             </div>
