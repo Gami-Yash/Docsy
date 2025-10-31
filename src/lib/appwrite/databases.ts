@@ -3,13 +3,13 @@ import { client } from "./client";
 import { appwriteConfig } from "../config/appwriteConfig";
 import { FileDocument } from '../types';
 
-// Initialize the Databases service
+
 const databases = new Databases(client);
 
-// Initialize the Storage service
+
 const storage = new Storage(client);
 
-// Function to store user data
+
 export const storeUserData = async (userId: string, email: string, name: string) => {
   try {
     console.log("Storing user data in collection:", {
@@ -20,16 +20,15 @@ export const storeUserData = async (userId: string, email: string, name: string)
       collectionId: appwriteConfig.usersCollectionId
     });
     
-    // Create a document in the users collection
-    // Note: Changed "name" to "fullName" to match the collection schema
+    
     const userData = await databases.createDocument(
       appwriteConfig.databaseId,
       appwriteConfig.usersCollectionId, 
-      userId, // Use the same ID as the Appwrite account
+      userId, 
       {
-        fullName: name, // Changed from "name" to "fullName"
+        fullName: name,
         email,
-        accountId: userId, // Also provide the field as accountId to match your schema
+        accountId: userId,
       }
     );
     
@@ -136,7 +135,7 @@ export const getFilesByUserId = async (userId: string) => {
     const response = await databases.listDocuments(
       appwriteConfig.databaseId,
       import.meta.env.VITE_APPWRITE_FILES_COLLECTION,
-      [Query.equal("users", userId)] // Query the "users" attribute with the userId
+      [Query.equal("users", userId)] // Ensure this query includes files with NULL folders
     );
 
     console.log("Files response:", response); // Debugging log

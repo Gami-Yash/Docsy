@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { Document, Page, pdfjs } from "react-pdf";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Loader2, Send, RefreshCw, FileText } from "lucide-react";
@@ -10,6 +9,7 @@ import { ChatMessage, sendChatRequest } from "@/services/AiService";
 import { createConversation, addMessage, getConversationMessages, getConversations } from "@/services/ChatServices";
 import { getFileById } from "@/lib/appwrite/databases";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { renderAsync } from "docx-preview";
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`;
 
@@ -25,6 +25,8 @@ const PdfChat = () => {
   const [fileName, setFileName] = useState(stateFileName || "Document");
   const [fileType, setFileType] = useState<'pdf' | 'txt' | 'docx' | 'unknown'>('unknown');
   const [textContent, setTextContent] = useState<string>("");
+  const [docxLoading, setDocxLoading] = useState(false);
+  const [docxData, setDocxData] = useState<ArrayBuffer | null>(null); // Store DOCX data
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
@@ -37,6 +39,7 @@ const PdfChat = () => {
   const [initError, setInitError] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const docxContainerRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
 
   const getCurrentUserId = () => {
@@ -49,7 +52,6 @@ const PdfChat = () => {
   };
   const userId = getCurrentUserId();
 
-  // Detect file type from filename
   const detectFileType = (filename: string): 'pdf' | 'txt' | 'docx' | 'unknown' => {
     const extension = filename.split('.').pop()?.toLowerCase();
     if (extension === 'pdf') return 'pdf';
@@ -58,7 +60,6 @@ const PdfChat = () => {
     return 'unknown';
   };
 
-  // Fetch text content for .txt files
   const fetchTextContent = async (url: string) => {
     try {
       const response = await fetch(url);
@@ -69,6 +70,45 @@ const PdfChat = () => {
       setFileError("Failed to load text file");
     }
   };
+
+  // Fetch DOCX data and store it
+  const fetchDocxData = async (url: string) => {
+    setDocxLoading(true);
+    try {
+      const response = await fetch(url);
+      const arrayBuffer = await response.arrayBuffer();
+      setDocxData(arrayBuffer);
+      setDocxLoading(false);
+    } catch (error) {
+      console.error("Error fetching DOCX:", error);
+      setFileError("Failed to load Word document");
+      setDocxLoading(false);
+    }
+  };
+
+  // Render DOCX when container ref is available
+  useEffect(() => {
+    if (docxData && docxContainerRef.current && fileType === 'docx') {
+      const renderDocx = async () => {
+        try {
+          docxContainerRef.current!.innerHTML = '';
+          await renderAsync(docxData, docxContainerRef.current!, undefined, {
+            className: "docx-preview-content",
+            inWrapper: true,
+            ignoreWidth: false,
+            ignoreHeight: false,
+            renderHeaders: true,
+            renderFooters: true,
+            useBase64URL: true,
+          });
+        } catch (error) {
+          console.error("Error rendering DOCX:", error);
+          setFileError("Failed to render Word document");
+        }
+      };
+      renderDocx();
+    }
+  }, [docxData, fileType]);
 
   useEffect(() => {
     const fetchFile = async () => {
@@ -81,9 +121,10 @@ const PdfChat = () => {
             const type = detectFileType(file.fileName);
             setFileType(type);
             
-            // If it's a text file, fetch its content
             if (type === 'txt') {
               await fetchTextContent(file.url);
+            } else if (type === 'docx') {
+              await fetchDocxData(file.url);
             }
           } else {
             throw new Error("File not found");
@@ -94,12 +135,13 @@ const PdfChat = () => {
           setIsLoading(false);
         }
       } else if (fileUrl && fileName) {
-        // If fileUrl is already provided, detect its type
         const type = detectFileType(fileName);
         setFileType(type);
         
         if (type === 'txt') {
           await fetchTextContent(fileUrl);
+        } else if (type === 'docx') {
+          await fetchDocxData(fileUrl);
         }
         setIsLoading(false);
       }
@@ -160,14 +202,32 @@ const PdfChat = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, chatLoading]);
 
-  // Render file viewer based on file type
   const renderFileViewer = () => {
     if (isLoading) {
-      return <Loader2 className="animate-spin h-8 w-8 text-primary" />;
+      return (
+        <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
+          <Loader2 className="animate-spin h-10 w-10 text-primary mb-4" />
+          <p className="text-sm font-medium text-gray-700 mb-2">Loading file...</p>
+          <p className="text-xs text-gray-500">Please wait while we fetch your document</p>
+        </div>
+      );
     }
 
     if (fileError) {
-      return <p className="text-red-500">{fileError}</p>;
+      return (
+        <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
+          <FileText className="h-16 w-16 text-red-300 mb-4" />
+          <p className="text-red-600 font-medium text-lg mb-2">{fileError}</p>
+          <Button 
+            onClick={() => window.location.reload()} 
+            variant="outline" 
+            className="mt-4"
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Reload Page
+          </Button>
+        </div>
+      );
     }
 
     if (fileType === 'pdf' && fileUrl) {
@@ -194,13 +254,13 @@ const PdfChat = () => {
 
     if (fileType === 'txt') {
       return (
-        <div className="w-full max-w-4xl bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="w-full max-w-4xl bg-white rounded-lg shadow-sm border border-gray-200 p-6 mx-auto">
           <div className="flex items-center mb-4 pb-4 border-b">
             <FileText className="h-5 w-5 text-gray-500 mr-2" />
             <h3 className="text-sm font-medium text-gray-700">Text File Preview</h3>
           </div>
           <div className="prose prose-sm max-w-none">
-            <pre className="whitespace-pre-wrap font-mono text-sm text-gray-800 bg-gray-50 p-4 rounded-md overflow-x-auto">
+            <pre className="whitespace-pre-wrap font-mono text-sm text-gray-800 bg-gray-50 p-4 rounded-md overflow-x-auto max-h-[600px]">
               {textContent || "Loading text content..."}
             </pre>
           </div>
@@ -210,22 +270,35 @@ const PdfChat = () => {
 
     if (fileType === 'docx') {
       return (
-        <div className="w-full max-w-4xl bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center mb-4">
+        <div className="w-full max-w-4xl bg-white rounded-lg shadow-sm border border-gray-200 p-6 mx-auto">
+          <div className="flex items-center mb-4 pb-4 border-b">
             <FileText className="h-5 w-5 text-blue-500 mr-2" />
-            <h3 className="text-sm font-medium text-gray-700">Word Document</h3>
+            <h3 className="text-sm font-medium text-gray-700">Word Document Preview</h3>
           </div>
-          <p className="text-sm text-gray-500">
-            Preview not available for Word documents. You can still chat about this document using the chat panel.
-          </p>
+          {docxLoading || !docxData ? (
+            <div className="flex flex-col items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-blue-500 mb-3" />
+              <span className="text-sm text-gray-600">Rendering document...</span>
+            </div>
+          ) : (
+            <div 
+              ref={docxContainerRef} 
+              className="docx-preview-wrapper max-h-[600px] overflow-y-auto bg-white p-4 rounded-md border border-gray-200"
+              style={{
+                fontSize: '14px',
+                lineHeight: '1.6',
+              }}
+            />
+          )}
         </div>
       );
     }
 
     return (
-      <div className="text-center text-gray-500">
-        <FileText className="h-12 w-12 mx-auto mb-2 text-gray-300" />
-        <p>File preview not available for this file type</p>
+      <div className="text-center text-gray-500 min-h-[400px] flex flex-col items-center justify-center">
+        <FileText className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+        <p className="text-lg font-medium">File preview not available</p>
+        <p className="text-sm text-gray-400 mt-2">This file type is not supported for preview</p>
       </div>
     );
   };
@@ -244,7 +317,7 @@ const PdfChat = () => {
       <div className="flex-1 grid grid-cols-1 md:grid-cols-2 overflow-hidden">
         {/* File Viewer */}
         <div className="flex flex-col overflow-auto border-r bg-white">
-          <div className="p-4 flex-1 flex flex-col items-center overflow-y-auto">
+          <div className="p-4 flex-1 flex flex-col items-center overflow-y-auto min-h-[400px]">
             {renderFileViewer()}
           </div>
           {numPages && fileType === 'pdf' && (

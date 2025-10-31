@@ -41,7 +41,7 @@ const FolderManager: React.FC<FolderManagerProps> = ({
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
+        <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2"> {/* Adjust height and enable scrolling */}
           {isLoading ? (
             <div className="text-center py-8 text-gray-500">
               <div className="animate-pulse space-y-3">
