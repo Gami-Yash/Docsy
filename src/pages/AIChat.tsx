@@ -218,7 +218,7 @@ const AIChat = () => {
 
         <Separator className="my-8" />
         <footer className="text-center text-xs text-gray-500">
-          <p>© 2025 PDF Chat App. All rights reserved.</p>
+          {/* <p>© 2025 PDF Chat App. All rights reserved.</p> */}
         </footer>
       </div>
     </div>

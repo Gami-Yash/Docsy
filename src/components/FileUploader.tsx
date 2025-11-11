@@ -50,6 +50,11 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   const folderInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
+  // Calculate overall progress
+  const overallProgress = totalFiles > 0 
+    ? ((currentFileIndex + (uploadProgress / 100)) / totalFiles) * 100 
+    : 0;
+
   // Initialize Appwrite Client
   const client = new Client();
   const storage = new Storage(client);
@@ -58,6 +63,13 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   client
     .setEndpoint(import.meta.env.VITE_APPWRITE_ENDPOINT)
     .setProject(import.meta.env.VITE_APPWRITE_PROJECT_ID);
+
+  const handleTabChange = (value: string) => {
+    // Clear files when switching tabs to avoid confusion
+    setFiles([]);
+    setFolderName("");
+    setUseExistingFolder(true);
+  };
 
   // Event handlers for drag and drop
   const handleDragEnter = (e: React.DragEvent) => {
@@ -519,126 +531,105 @@ const FileUploader: React.FC<FileUploaderProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">
         <DialogHeader>
           <DialogTitle>Upload PDFs</DialogTitle>
         </DialogHeader>
 
-        <Tabs defaultValue="upload" className="w-full">
+        <Tabs defaultValue="upload" className="w-full flex-1 min-h-0 flex flex-col" onValueChange={handleTabChange}>
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="upload">Upload Files</TabsTrigger>
             <TabsTrigger value="folder">Upload Folder</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="upload" className="space-y-4">
-            <div
-              onDragEnter={handleDragEnter}
-              onDragLeave={handleDragLeave}
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
-              className={`border-2 border-dashed rounded-lg p-8 transition-colors cursor-pointer ${
-                isDragging ? 'border-primary bg-green-50' : 'border-gray-300 hover:border-gray-400'
-              }`}
-            >
-              <div className="text-center">
-                <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-lg font-medium text-gray-700 mb-2">
-                  Drag & drop PDFs here
-                </p>
-                <p className="text-sm text-gray-500 mb-4">
-                  or click to browse files
-                </p>
-                <Button 
-                  variant="outline" 
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  Select files
-                </Button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf,.txt,.docx"
-                  multiple
-                  onChange={handleFileInputChange}
-                  className="hidden"
-                />
-              </div>
-            </div>
-
-            {/* Selected Files Preview */}
-            {files.length > 0 && (
-              <div className="space-y-3">
-                <h4 className="text-sm font-medium text-gray-700">
-                  Selected files ({files.length})
-                </h4>
-                <div className="max-h-32 overflow-y-auto space-y-2">
-                  {files.map((file, index) => (
-                    <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                      <div className="flex items-center min-w-0">
-                        <FileText className="h-4 w-4 text-red-500 mr-2 flex-shrink-0" />
-                        <span className="text-sm truncate">{file.name}</span>
-                      </div>
-                      <div className="flex items-center ml-2">
-                        <Badge variant="outline" className="text-xs mr-2">
-                          {(file.size / (1024 * 1024)).toFixed(1)} MB
-                        </Badge>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeFile(index)}
-                          className="text-gray-400 hover:text-red-500 p-1 h-auto"
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+          <div className="flex-1 overflow-y-auto p-1">
+            <TabsContent value="upload" className="space-y-4 pt-4">
+              <div
+                onDragEnter={handleDragEnter}
+                onDragLeave={handleDragLeave}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
+                className={`border-2 border-dashed rounded-lg p-8 transition-colors cursor-pointer ${
+                  isDragging ? 'border-primary bg-green-50' : 'border-gray-300 hover:border-gray-400'
+                }`}
+              >
+                <div className="text-center">
+                  <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-lg font-medium text-gray-700 mb-2">
+                    Drag & drop PDFs here
+                  </p>
+                  <p className="text-sm text-gray-500 mb-4">
+                    or click to browse files
+                  </p>
+                  <Button 
+                    variant="outline" 
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    Select files
+                  </Button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.txt,.docx"
+                    multiple
+                    onChange={handleFileInputChange}
+                    className="hidden"
+                  />
                 </div>
               </div>
-            )}
 
-            {/* Upload Progress */}
-            {isUploading && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">
-                    Uploading... ({currentFileIndex + 1}/{totalFiles})
-                  </span>
-                  <span className="text-sm text-gray-500">
-                    {Math.round(uploadProgress)}%
-                  </span>
-                </div>
-                <Progress value={uploadProgress} className="h-2" />
-              </div>
-            )}
-
-            <div className="flex justify-end space-x-2">
-              <Button variant="outline" onClick={handleCancel} disabled={isUploading}>
-                Cancel
-              </Button>
+              {/* Selected Files Preview */}
               {files.length > 0 && (
-                <Button 
-                  onClick={uploadFilesToAppwrite}
-                  disabled={isUploading}
-                  className="bg-primary hover:bg-primary/90"
-                >
-                  {isUploading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Uploading...
-                    </>
-                  ) : (
-                    <>Upload {files.length} file{files.length > 1 ? 's' : ''}</>
-                  )}
-                </Button>
+                <div className="space-y-3">
+                  <h4 className="text-sm font-medium text-gray-700">
+                    Selected files ({files.length})
+                  </h4>
+                  <div className="max-h-32 overflow-y-auto space-y-2">
+                    {files.map((file, index) => (
+                      <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                        <div className="flex items-center min-w-0">
+                          <FileText className="h-4 w-4 text-red-500 mr-2 flex-shrink-0" />
+                          <span className="text-sm truncate" title={file.name}>{file.name}</span>
+                        </div>
+                        <div className="flex items-center ml-2">
+                          <Badge variant="outline" className="text-xs mr-2">
+                            {(file.size / (1024 * 1024)).toFixed(1)} MB
+                          </Badge>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeFile(index)}
+                            className="text-gray-400 hover:text-red-500 p-1 h-auto"
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
-            </div>
+
+              {/* Upload Progress */}
+              {isUploading && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">
+                      Uploading... ({currentFileIndex + 1}/{totalFiles})
+                    </span>
+                    <span className="text-sm text-gray-500">
+                      {Math.round(overallProgress)}%
+                    </span>
+                  </div>
+                  <Progress value={overallProgress} className="h-2" />
+                </div>
+              )}
           </TabsContent>
 
-          <TabsContent value="folder" className="space-y-4">
-            {/* Folder Selection UI */}
-            {!useExistingFolder && folderName && (
+          <TabsContent value="folder" className="space-y-4 pt-4">
+            {/* Folder Selection UI - Hide if files are selected */}
+            {!useExistingFolder && folderName && files.length === 0 && (
               <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center">
@@ -665,54 +656,56 @@ const FileUploader: React.FC<FileUploaderProps> = ({
               </div>
             )}
 
-            {/* Folder Upload Area */}
-            <div
-              onDragEnter={handleDragEnter}
-              onDragLeave={handleDragLeave}
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
-              className={`border-2 border-dashed rounded-lg p-8 transition-colors ${
-                isDragging ? 'border-primary bg-green-50' : 'border-gray-300 hover:border-gray-400'
-              }`}
-            >
-              <div className="text-center">
-                <FolderOpen className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-lg font-medium text-gray-700 mb-2">
-                  Drop folder here or click to browse
-                </p>
-                <p className="text-sm text-gray-500 mb-4">
-                  Upload entire folders with PDF files
-                </p>
-                {!isIOS() ? (
-                  <Button
-                    variant="outline"
-                    onClick={() => folderInputRef.current?.click()}
-                    type="button"
-                  >
-                    <FolderOpen className="mr-2 h-4 w-4" />
-                    Select Folder
-                  </Button>
-                ) : (
-                  <div className="text-sm text-gray-500">
-                    <p>Folder upload not supported on iOS</p>
-                    <p className="mt-1">Please use individual file upload</p>
-                  </div>
-                )}
-                <input
-                  ref={folderInputRef}
-                  type="file"
-                  webkitdirectory="true"
-                  directory="true"
-                  multiple
-                  onChange={handleFolderInputChange}
-                  className="hidden"
-                  accept=".pdf,.txt,.docx"
-                />
+            {/* Folder Upload Area - Hide if files are selected */}
+            {files.length === 0 && (
+              <div
+                onDragEnter={handleDragEnter}
+                onDragLeave={handleDragLeave}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
+                className={`border-2 border-dashed rounded-lg p-8 transition-colors ${
+                  isDragging ? 'border-primary bg-green-50' : 'border-gray-300 hover:border-gray-400'
+                }`}
+              >
+                <div className="text-center">
+                  <FolderOpen className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-lg font-medium text-gray-700 mb-2">
+                    Drop folder here or click to browse
+                  </p>
+                  <p className="text-sm text-gray-500 mb-4">
+                    Upload entire folders with PDF files
+                  </p>
+                  {!isIOS() ? (
+                    <Button
+                      variant="outline"
+                      onClick={() => folderInputRef.current?.click()}
+                      type="button"
+                    >
+                      <FolderOpen className="mr-2 h-4 w-4" />
+                      Select Folder
+                    </Button>
+                  ) : (
+                    <div className="text-sm text-gray-500">
+                      <p>Folder upload not supported on iOS</p>
+                      <p className="mt-1">Please use individual file upload</p>
+                    </div>
+                  )}
+                  <input
+                    ref={folderInputRef}
+                    type="file"
+                    webkitdirectory="true"
+                    directory="true"
+                    multiple
+                    onChange={handleFolderInputChange}
+                    className="hidden"
+                    accept=".pdf,.txt,.docx"
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
-            {/* Quick Folder Create */}
-            {!selectedFolderId && (
+            {/* Quick Folder Create - Hide if files are selected */}
+            {!selectedFolderId && files.length === 0 && (
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-gray-700">Or create a new folder</span>
@@ -762,7 +755,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({
                     <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
                       <div className="flex items-center min-w-0">
                         <FileText className="h-4 w-4 text-red-500 mr-2 flex-shrink-0" />
-                        <span className="text-sm truncate">{file.name}</span>
+                        <span className="text-sm truncate" title={file.name}>{file.name}</span>
                       </div>
                       <div className="flex items-center ml-2">
                         <Badge variant="outline" className="text-xs mr-2">
@@ -805,44 +798,45 @@ const FileUploader: React.FC<FileUploaderProps> = ({
                     Uploading... ({currentFileIndex + 1}/{totalFiles})
                   </span>
                   <span className="text-sm text-gray-500">
-                    {Math.round(uploadProgress)}%
+                    {Math.round(overallProgress)}%
                   </span>
                 </div>
-                <Progress value={uploadProgress} className="h-2" />
+                <Progress value={overallProgress} className="h-2" />
               </div>
             )}
-
-            {/* Action Buttons */}
-            <div className="flex justify-end space-x-2 pt-4">
-              <Button 
-                variant="outline" 
-                onClick={handleCancel}
-                disabled={isUploading}
-              >
-                Cancel
-              </Button>
-              {files.length > 0 && (
-                <Button 
-                  onClick={uploadFilesToAppwrite}
-                  disabled={isUploading}
-                  className="bg-primary hover:bg-primary/90"
-                >
-                  {isUploading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Uploading...
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="mr-2 h-4 w-4" />
-                      Upload {files.length} file{files.length > 1 ? 's' : ''}
-                    </>
-                  )}
-                </Button>
-              )}
-            </div>
           </TabsContent>
+          </div>
         </Tabs>
+        
+        {/* Unified Action Buttons in Dialog Footer */}
+        <div className="flex justify-end space-x-2 pt-4 border-t">
+          <Button 
+            variant="outline" 
+            onClick={handleCancel}
+            disabled={isUploading}
+          >
+            Cancel
+          </Button>
+          {files.length > 0 && (
+            <Button 
+              onClick={uploadFilesToAppwrite}
+              disabled={isUploading || files.length === 0}
+              className="bg-primary hover:bg-primary/90"
+            >
+              {isUploading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Uploading...
+                </>
+              ) : (
+                <>
+                  <Upload className="mr-2 h-4 w-4" />
+                  Upload {files.length} file{files.length > 1 ? 's' : ''}
+                </>
+              )}
+            </Button>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );
